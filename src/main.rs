@@ -31,10 +31,15 @@ mod smtp;
 
 use std::collections::BTreeMap;
 use std::io::{self, Write};
+use std::sync::Arc;
 
+use axum::Router;
 use config::ServerConfig;
 use rmcp::ServiceExt;
 use rmcp::transport::stdio;
+use rmcp::transport::streamable_http_server::{
+    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+};
 use tracing_subscriber::EnvFilter;
 
 /// Application entry point
@@ -73,13 +78,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_writer(std::io::stderr)
         .init();
 
-    tracing::info!("starting MCP server transport=Stdio");
     let config = ServerConfig::load_from_env()?;
     let update_notice = check_for_updates().await;
-    let service = server::MailImapServer::new(config, update_notice)
-        .serve(stdio())
-        .await?;
-    service.waiting().await?;
+
+    if let Ok(port) = std::env::var("MCP_PORT") {
+        let addr = format!("0.0.0.0:{port}");
+        tracing::info!("starting MCP server transport=StreamableHttp addr={addr}");
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        let session_manager = Arc::new(LocalSessionManager::default());
+        let http_service = StreamableHttpService::new(
+            move || {
+                Ok(server::MailImapServer::new(
+                    config.clone(),
+                    update_notice.clone(),
+                ))
+            },
+            session_manager,
+            StreamableHttpServerConfig::default(),
+        );
+        let router = Router::new().route_service("/mcp", http_service);
+        axum::serve(listener, router)
+            .with_graceful_shutdown(async {
+                tokio::signal::ctrl_c().await.ok();
+            })
+            .await?;
+    } else {
+        tracing::info!("starting MCP server transport=Stdio");
+        let service = server::MailImapServer::new(config, update_notice)
+            .serve(stdio())
+            .await?;
+        service.waiting().await?;
+    }
     Ok(())
 }
 

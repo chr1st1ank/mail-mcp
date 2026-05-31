@@ -85,14 +85,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let addr = format!("0.0.0.0:{port}");
         tracing::info!("starting MCP server transport=StreamableHttp addr={addr}");
         let listener = tokio::net::TcpListener::bind(&addr).await?;
+        let shared_server = server::MailImapServer::new(config, update_notice);
         let session_manager = Arc::new(LocalSessionManager::default());
         let http_service = StreamableHttpService::new(
-            move || {
-                Ok(server::MailImapServer::new(
-                    config.clone(),
-                    update_notice.clone(),
-                ))
-            },
+            move || Ok(shared_server.clone()),
             session_manager,
             StreamableHttpServerConfig::default(),
         );

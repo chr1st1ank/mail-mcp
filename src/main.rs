@@ -98,18 +98,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         let router = Router::new().route_service("/mcp", http_service);
         axum::serve(listener, router)
-            .with_graceful_shutdown(async {
-                tokio::signal::ctrl_c().await.ok();
-            })
-            .await?;
+            .with_graceful_shutdown(shutdown_signal())
+            .await?
     } else {
         tracing::info!("starting MCP server transport=Stdio");
         let service = server::MailImapServer::new(config, update_notice)
             .serve(stdio())
             .await?;
-        service.waiting().await?;
+        tokio::select! {
+            res = service.waiting() => { res?; }
+            _ = shutdown_signal() => {}
+        }
     }
     Ok(())
+}
+
+/// Wait for either SIGINT or SIGTERM so the process shuts down cleanly under
+/// Docker and other supervisors that send SIGTERM to stop a container.
+///
+/// Falls back to SIGINT-only on non-Unix targets.
+async fn shutdown_signal() {
+    use tokio::signal;
+
+    #[cfg(unix)]
+    {
+        use signal::unix::{SignalKind, signal};
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("failed to install SIGTERM handler: {e}");
+                let _ = signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = signal::ctrl_c() => tracing::info!("received SIGINT, shutting down"),
+            _ = sigterm.recv() => tracing::info!("received SIGTERM, shutting down"),
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = signal::ctrl_c().await;
+    }
 }
 
 /// Check GitHub for newer releases. Returns a notice string if an update is available.

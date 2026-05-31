@@ -36,6 +36,14 @@ fn nonnegative_integer_schema(_: &mut schemars::SchemaGenerator) -> schemars::Sc
     })
 }
 
+fn optional_search_text_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": ["string", "null"],
+        "minLength": 1,
+        "maxLength": 256
+    })
+}
+
 /// Standard response envelope for all tools
 ///
 /// Wraps tool-specific data with human-readable summary and execution metadata.
@@ -193,13 +201,17 @@ pub struct SearchMessagesInput {
     pub mailbox: String,
     /// Pagination cursor from previous search result
     pub cursor: Option<String>,
-    /// Full-text search query
+    /// Full-text search query (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub query: Option<String>,
-    /// Filter by From header
+    /// Filter by From header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub from: Option<String>,
-    /// Filter by To header
+    /// Filter by To header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub to: Option<String>,
-    /// Filter by Subject header
+    /// Filter by Subject header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub subject: Option<String>,
     /// Filter to unread messages only
     pub unread_only: Option<bool>,
@@ -461,13 +473,17 @@ pub struct SearchAndMoveInput {
     pub mailbox: String,
     /// Destination mailbox name
     pub destination_mailbox: String,
-    /// Full-text search query
+    /// Full-text search query (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub query: Option<String>,
-    /// Filter by From header
+    /// Filter by From header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub from: Option<String>,
-    /// Filter by To header
+    /// Filter by To header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub to: Option<String>,
-    /// Filter by Subject header
+    /// Filter by Subject header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub subject: Option<String>,
     /// Filter to unread messages only
     pub unread_only: Option<bool>,
@@ -499,13 +515,17 @@ pub struct SearchAndDeleteInput {
     pub mailbox: String,
     /// Explicit confirmation required (must be `true`)
     pub confirm: bool,
-    /// Full-text search query
+    /// Full-text search query (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub query: Option<String>,
-    /// Filter by From header
+    /// Filter by From header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub from: Option<String>,
-    /// Filter by To header
+    /// Filter by To header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub to: Option<String>,
-    /// Filter by Subject header
+    /// Filter by Subject header (1..256 chars)
+    #[schemars(schema_with = "optional_search_text_schema")]
     pub subject: Option<String>,
     /// Filter to unread messages only
     pub unread_only: Option<bool>,

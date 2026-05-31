@@ -3656,6 +3656,7 @@ async fn build_message_summaries(
 
         let date = header_value(&headers, "date");
         let from = header_value(&headers, "from");
+        let to = header_value(&headers, "to");
         let subject = header_value(&headers, "subject");
 
         let snippet = if options.include_snippet {
@@ -3695,6 +3696,7 @@ async fn build_message_summaries(
             uid: *uid,
             date,
             from,
+            to,
             subject,
             flags: Some(flags),
             snippet,

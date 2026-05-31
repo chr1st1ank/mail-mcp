@@ -101,6 +101,8 @@ pub struct MessageSummary {
     pub date: Option<String>,
     /// Parsed From header
     pub from: Option<String>,
+    /// Parsed To header
+    pub to: Option<String>,
     /// Parsed Subject header
     pub subject: Option<String>,
     /// IMAP flags (e.g., `\Seen`, `\Flagged`)

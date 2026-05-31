@@ -352,6 +352,25 @@ pub async fn fetch_raw_message(
     Ok(body.to_vec())
 }
 
+/// Fetch a prefix of the raw message without marking it as read
+///
+/// Returns up to `max_bytes` of the RFC822 source using `BODY.PEEK[]<0.N>`,
+/// which avoids setting the `\Seen` flag. Useful for generating body snippets
+/// without fetching potentially large attachments.
+pub async fn fetch_body_prefix(
+    server: &ServerConfig,
+    session: &mut ImapSession,
+    uid: u32,
+    max_bytes: u32,
+) -> AppResult<Vec<u8>> {
+    let query = format!("BODY.PEEK[]<0.{max_bytes}>");
+    let fetch = fetch_one(server, session, uid, &query).await?;
+    let body = fetch
+        .body()
+        .ok_or_else(|| AppError::Internal("message body prefix not available".to_owned()))?;
+    Ok(body.to_vec())
+}
+
 /// Fetch curated headers and flags
 ///
 /// Returns standard headers (Date, From, To, CC, Subject) and message flags.

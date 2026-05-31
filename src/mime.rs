@@ -4,7 +4,7 @@
 //! and handles attachments. Sanitizes HTML with `ammonia` and supports
 //! optional PDF text extraction.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use mailparse::{DispositionType, MailHeader, ParsedMail};
 
@@ -267,13 +267,54 @@ pub fn extract_body_text(parsed: &mailparse::ParsedMail<'_>) -> Option<String> {
     None
 }
 
+/// Extract a plain-text body snippet from raw RFC822 bytes
+///
+/// Tolerates truncated or partially malformed input; returns `None` without
+/// an error if the prefix cannot be parsed. Prefers `text/plain`; falls back
+/// to `text/html` with tags stripped. Normalizes whitespace and truncates the
+/// result to `max_chars`.
+pub fn extract_snippet(raw_prefix: &[u8], max_chars: usize) -> Option<String> {
+    let parsed = mailparse::parse_mail(raw_prefix).ok()?;
+    let text = extract_body_text(&parsed).or_else(|| extract_html_body_as_text(&parsed));
+    text.map(|t| {
+        let normalized = t.split_whitespace().collect::<Vec<_>>().join(" ");
+        truncate_chars(normalized, max_chars)
+    })
+}
+
+/// Walk MIME parts and return the first `text/html` body with tags stripped
+fn extract_html_body_as_text(parsed: &ParsedMail<'_>) -> Option<String> {
+    let html = find_html_body(parsed)?;
+    let stripped = ammonia::Builder::new()
+        .tags(HashSet::new())
+        .clean(&html)
+        .to_string();
+    Some(stripped)
+}
+
+/// Walk MIME parts and return the first raw `text/html` body string
+fn find_html_body(parsed: &ParsedMail<'_>) -> Option<String> {
+    if parsed.subparts.is_empty() {
+        if parsed.ctype.mimetype.eq_ignore_ascii_case("text/html") {
+            return parsed.get_body().ok();
+        }
+        return None;
+    }
+    for sub in &parsed.subparts {
+        if let Some(html) = find_html_body(sub) {
+            return Some(html);
+        }
+    }
+    None
+}
+
 pub fn truncate_chars(input: String, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{curated_headers, parse_message, truncate_chars};
+    use super::{curated_headers, extract_snippet, parse_message, truncate_chars};
 
     /// Tests that Unicode strings are truncated by character, not byte.
     #[test]
@@ -302,6 +343,46 @@ mod tests {
 
         let all = curated_headers(&headers, true);
         assert_eq!(all.len(), 3);
+    }
+
+    /// Tests snippet extraction from a plain-text message.
+    #[test]
+    fn extract_snippet_plain_text() {
+        let raw = b"From: a@b.com\r\nSubject: Hi\r\n\r\nHello world, this is a test.";
+        let snippet = extract_snippet(raw, 200);
+        assert_eq!(snippet.as_deref(), Some("Hello world, this is a test."));
+    }
+
+    /// Tests that snippet is truncated to max_chars.
+    #[test]
+    fn extract_snippet_truncates() {
+        let raw = b"From: a@b.com\r\n\r\nOne two three four five";
+        let snippet = extract_snippet(raw, 10);
+        assert_eq!(snippet.as_deref(), Some("One two th"));
+    }
+
+    /// Tests snippet falls back to stripped HTML when no text/plain part exists.
+    #[test]
+    fn extract_snippet_html_fallback() {
+        let raw = b"From: a@b.com\r\nContent-Type: text/html\r\n\r\n<p>Hello <b>world</b></p>";
+        let snippet = extract_snippet(raw, 200);
+        assert_eq!(snippet.as_deref(), Some("Hello world"));
+    }
+
+    /// Tests snippet from multipart/alternative prefers text/plain over HTML.
+    #[test]
+    fn extract_snippet_multipart_prefers_plain() {
+        let raw = b"From: a@b.com\r\nContent-Type: multipart/alternative; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nPlain text body\r\n--b\r\nContent-Type: text/html\r\n\r\n<p>HTML body</p>\r\n--b--";
+        let snippet = extract_snippet(raw, 200);
+        assert_eq!(snippet.as_deref(), Some("Plain text body"));
+    }
+
+    /// Tests that a completely garbled/empty prefix returns None without panicking.
+    #[test]
+    fn extract_snippet_garbled_returns_none() {
+        let raw = b"this is not valid RFC822 at all \x00\x01\x02";
+        // Should not panic; result may be Some or None depending on mailparse tolerance
+        let _ = extract_snippet(raw, 200);
     }
 
     /// Tests parsing of a simple plain text message and verifies header and body extraction.

@@ -41,6 +41,8 @@ const MAX_ATTACHMENTS: usize = 50;
 const MAX_CURSOR_UIDS_STORED: usize = 20_000;
 /// Maximum message IDs per bulk operation
 const MAX_BULK_IDS: usize = 500;
+/// Byte limit for the body prefix peeked when generating a snippet
+const SNIPPET_PEEK_BYTES: u32 = 65_536;
 
 /// IMAP MCP server
 ///
@@ -3660,9 +3662,13 @@ async fn build_message_summaries(
         let subject = header_value(&headers, "subject");
 
         let snippet = if options.include_snippet {
-            subject
-                .clone()
-                .map(|s| mime::truncate_chars(s, options.snippet_max_chars))
+            match imap::fetch_body_prefix(config, session, *uid, SNIPPET_PEEK_BYTES).await {
+                Ok(prefix) => mime::extract_snippet(&prefix, options.snippet_max_chars),
+                Err(error) => {
+                    issues.push(ToolIssue::from_error("fetch_body_prefix", &error).with_uid(*uid));
+                    None
+                }
+            }
         } else {
             None
         };

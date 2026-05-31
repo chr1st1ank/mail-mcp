@@ -82,7 +82,7 @@ pub struct MailboxInfo {
 /// Message summary for search results
 ///
 /// Lightweight representation returned by `imap_search_messages`. Includes
-/// optional snippet for preview.
+/// an optional body-text snippet for preview.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MessageSummary {
     /// Stable, opaque message identifier
@@ -107,7 +107,7 @@ pub struct MessageSummary {
     pub subject: Option<String>,
     /// IMAP flags (e.g., `\Seen`, `\Flagged`)
     pub flags: Option<Vec<String>>,
-    /// Optional subject snippet (if `include_snippet=true`)
+    /// Optional body-text snippet (if `include_snippet=true`)
     pub snippet: Option<String>,
 }
 
@@ -212,10 +212,10 @@ pub struct SearchMessagesInput {
     /// Maximum messages to return (1..50, default 10)
     #[serde(default = "default_limit")]
     pub limit: usize,
-    /// Include subject snippet in results
+    /// Include body text snippet in results
     #[serde(default)]
     pub include_snippet: bool,
-    /// Maximum snippet length (50..500, requires `include_snippet=true`)
+    /// Maximum snippet length in characters (50..500, requires `include_snippet=true`)
     pub snippet_max_chars: Option<usize>,
 }
 
